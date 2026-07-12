@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to use
+        type: string
+        default: "20"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test --if-present
+
+      # Obsidian expects main.js and manifest.json, plus styles.css if the plugin has one
+      - name: Collect release assets
+        id: assets
+        run: |
+          assets="main.js manifest.json"
+          if [[ -f styles.css ]]; then
+            assets="$assets styles.css"
+          fi
+          echo "list=$assets" >> "$GITHUB_OUTPUT"
+          {
+            echo "paths<<EOF"
+            tr ' ' '\n' <<< "$assets"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ steps.assets.outputs.paths }}
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(jq -r .version manifest.json)"
+          if gh release view "$version" >/dev/null 2>&1; then
+            echo "Release $version already exists, skipping."
+            exit 0
+          fi
+          gh release create "$version" \
+            --target "$GITHUB_SHA" \
+            --title "$version" \
+            --generate-notes \
+            ${{ steps.assets.outputs.list }}
