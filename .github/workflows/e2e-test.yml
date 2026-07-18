@@ -1,0 +1,37 @@
+name: E2E Test
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to use (leave empty to use setup-node's own default)
+        type: string
+      test-script:
+        description: npm script to run for the e2e tests
+        type: string
+        default: "test:e2e"
+      versions-lock-file:
+        description: Path to a file to hash for the Obsidian binary cache key
+        type: string
+        default: ""
+      window-manager:
+        description: Install and run herbstluftwm + dzen2 under Xvfb
+        type: boolean
+        default: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - uses: laughedelic/gha-obsidian/actions/e2e-test@main
+        with:
+          test-script: ${{ inputs.test-script }}
+          versions-lock-file: ${{ inputs.versions-lock-file }}
+          window-manager: ${{ inputs.window-manager }}

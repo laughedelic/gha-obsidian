@@ -1,0 +1,21 @@
+name: CI Checks
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to use (leave empty to use setup-node's own default)
+        type: string
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - uses: laughedelic/gha-obsidian/actions/ci-checks@main

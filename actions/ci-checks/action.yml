@@ -1,0 +1,19 @@
+name: Obsidian Plugin CI Checks
+description: >
+  Install, lint, build, and test an Obsidian plugin. Assumes Node.js is
+  already set up and the repo is already checked out.
+
+runs:
+  using: composite
+  steps:
+    - run: npm ci
+      shell: bash
+
+    - run: npm run lint --if-present
+      shell: bash
+
+    - run: npm run build
+      shell: bash
+
+    - run: npm test --if-present
+      shell: bash

@@ -1,9 +1,9 @@
 # gha-obsidian
 
-Reusable [composite GitHub Actions](https://docs.github.com/en/actions/creating-actions/creating-a-composite-action)
-for [Obsidian](https://obsidian.md) plugins. One place to maintain CI, e2e,
-and release automation; every plugin repo just references these actions from
-its own workflow steps and picks up improvements automatically.
+Reusable GitHub Actions for [Obsidian](https://obsidian.md) plugin CI and
+release automation. One place to maintain lint/build/test/e2e/release logic;
+plugin repos pick up improvements automatically instead of copy-pasting
+workflow YAML around.
 
 The release flow is designed around the [Obsidian community plugin
 requirements](https://docs.obsidian.md/Plugins/Releasing/Release+your+plugin+with+GitHub+Actions):
@@ -11,13 +11,30 @@ a GitHub release tagged with the exact version from `manifest.json` (no `v`
 prefix), with `main.js`, `manifest.json`, and `styles.css` (if present)
 attached as individual assets.
 
-## Usage
+There are three independent action/workflow pairs, one per concern:
 
-Each plugin repo keeps its own thin workflow files (composite actions can't
-set `permissions:` or `runs-on:`, so those stay in the caller's workflow).
+| Concern    | Composite action        | Reusable workflow                 |
+| ---------- | ------------------------ | ---------------------------------- |
+| CI checks  | `actions/ci-checks`      | `.github/workflows/ci-checks.yml`  |
+| E2E tests  | `actions/e2e-test`       | `.github/workflows/e2e-test.yml`   |
+| Release    | `actions/release`        | `.github/workflows/release.yml`    |
 
-`.github/workflows/ci.yml` — lint, build, test, and (optionally) e2e-test on
-every push and PR:
+- **Reusable workflows** are the typical, job-level way to use this. They
+  check out the repo, set up Node.js, and run the corresponding composite
+  action. Use these unless you need something the typical job doesn't do.
+- **Composite actions** are the underlying building blocks, invoked at the
+  step level. They're intentionally minimal about environment setup — no
+  checkout, no `setup-node` — since that's common boilerplate any caller
+  already has. But each action still owns everything specific to its own
+  concern (e.g. `actions/e2e-test` handles its own build, its own Obsidian
+  binary cache, its own optional window manager) rather than pushing that
+  out to the caller. Use these directly when you need to interleave extra
+  steps of your own around them.
+
+## Usage: reusable workflows (typical)
+
+`.github/workflows/ci.yml` — lint, build, test, and e2e-test on every push
+and PR:
 
 ```yaml
 name: CI
@@ -27,26 +44,23 @@ on:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: read
-
 jobs:
   check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: laughedelic/gha-obsidian/actions/ci@main
+    uses: laughedelic/gha-obsidian/.github/workflows/ci-checks.yml@main
+    with:
+      node-version: "22"
 
   e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: laughedelic/gha-obsidian/actions/e2e@main
+    uses: laughedelic/gha-obsidian/.github/workflows/e2e-test.yml@main
+    with:
+      node-version: "22"
+      test-script: "test:e2e"
 
   e2e-mobile:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: laughedelic/gha-obsidian/actions/e2e@main
-        with:
-          mobile: true
+    uses: laughedelic/gha-obsidian/.github/workflows/e2e-test.yml@main
+    with:
+      node-version: "22"
+      test-script: "test:e2e:mobile"
 ```
 
 `.github/workflows/release.yml` — cut a release whenever the version in
@@ -60,49 +74,76 @@ on:
     branches: [main]
     paths: [manifest.json]
 
-permissions:
-  contents: write     # create the release
-  id-token: write     # build provenance attestation
-  attestations: write # build provenance attestation
-
 jobs:
   release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: laughedelic/gha-obsidian/actions/release@main
+    uses: laughedelic/gha-obsidian/.github/workflows/release.yml@main
+    with:
+      node-version: "22"
 ```
 
 Releasing a new version is then just: bump `version` in `manifest.json`
 (and `package.json` / `versions.json` as appropriate), merge to `main`, done.
-The release action is idempotent — if a release for that version already
+The release workflow is idempotent — if a release for that version already
 exists, it skips instead of failing.
 
-## What the actions do
+All three reusable workflows accept a `node-version` input. Leave it unset
+to let [`setup-node`](https://github.com/actions/setup-node) fall back to
+whatever Node is pre-installed on the runner, or pass it explicitly to pin a
+version, e.g. `node-version: "22"` or `node-version: "lts/*"`.
 
-### `actions/ci`
+`e2e-test.yml` runs one e2e npm script per call — invoke it once per script
+if you have separate desktop/mobile suites, as in the example above.
+
+## Usage: composite actions (custom jobs)
+
+Use these directly, at the step level, when your job needs more than the
+typical checkout → setup-node → run pipeline — e.g. extra tooling, a
+different step order, or version-aware e2e caching:
+
+```yaml
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with: { node-version: "22", cache: npm }
+
+      - run: node -e "..." > obsidian-versions-lock.txt # resolve pinned Obsidian version(s)
+
+      - uses: laughedelic/gha-obsidian/actions/e2e-test@main
+        with:
+          test-script: test:e2e
+          versions-lock-file: obsidian-versions-lock.txt
+          window-manager: true # if your tests need real focus/hover behavior
+```
+
+## What's included
+
+### `actions/ci-checks`
 
 - `npm ci`
 - `npm run lint` (skipped if the script doesn't exist)
 - `npm run build`
 - `npm test` (skipped if the script doesn't exist)
 
-| Input          | Default | Description                                                                          |
-| -------------- | ------- | ------------------------------------------------------------------------------------ |
-| `node-version` | _(none)_ | Node.js version to use. Left empty by default, so [`setup-node`](https://github.com/actions/setup-node) falls back to whatever Node is pre-installed on the runner. |
+No inputs.
 
-### `actions/e2e`
+### `actions/e2e-test`
 
-Runs [wdio-obsidian-service](https://github.com/jesse-r-s-hines/wdio-obsidian-service)
-e2e tests. Obsidian is Electron-based and needs a display even in "headless"
-mode, so tests run under `xvfb-run`. Caches `.obsidian-cache` (downloaded
-Obsidian binaries) across runs.
+- `npm ci`, `npm run build`
+- Caches the downloaded Obsidian binary (`.obsidian-cache`)
+- Optionally installs and starts `herbstluftwm` + `dzen2` under Xvfb, for
+  tests that need real window management (e.g. focus/hover behavior) rather
+  than a bare X server
+- Runs the e2e npm script under `xvfb-run` (Obsidian is Electron and needs a
+  display even when "headless")
 
-| Input                 | Default            | Description                                                                          |
-| ---------------------- | ------------------ | ------------------------------------------------------------------------------------ |
-| `node-version`         | _(none)_            | Node.js version to use. Left empty by default, so `setup-node` falls back to whatever Node is pre-installed on the runner. |
-| `mobile`               | `false`             | Run the mobile e2e script instead of desktop                                         |
-| `test-script`          | `"test:e2e"`        | npm script to run for desktop e2e tests                                              |
-| `test-script-mobile`   | `"test:e2e:mobile"` | npm script to run for mobile e2e tests                                               |
+| Input                 | Default   | Description                                                                                                              |
+| ---------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `test-script`          | _(required)_ | npm script to run for the e2e tests. Call the action/workflow once per script for separate desktop/mobile suites.        |
+| `versions-lock-file`   | _(none)_    | Path to a file to hash for the Obsidian binary cache key, for version-aware invalidation. Leave empty for a static entry. |
+| `window-manager`       | `false`    | Install and run `herbstluftwm` + `dzen2` under Xvfb                                                                       |
 
 ### `actions/release`
 
@@ -112,60 +153,22 @@ Obsidian binaries) across runs.
 - Creates a GitHub release named after `manifest.json`'s `version`, with
   auto-generated notes and the plugin assets attached
 
-| Input          | Default | Description                                                                          |
-| -------------- | ------- | ------------------------------------------------------------------------------------ |
-| `node-version` | _(none)_ | Node.js version to use. Left empty by default, so `setup-node` falls back to whatever Node is pre-installed on the runner. |
-
-To pin a specific version, pass it explicitly, e.g. `node-version: "22"` or
-`node-version: "lts/*"`.
+No inputs.
 
 ## Assumptions
 
 - npm with a committed `package-lock.json` (`npm ci`)
 - `npm run build` produces `main.js` at the repo root
 - `manifest.json` at the repo root is the source of truth for the version
-- `actions/e2e` assumes `wdio-obsidian-service`-style `test:e2e` /
-  `test:e2e:mobile` npm scripts (override via inputs if named differently)
+- `actions/e2e-test` runs whatever npm script `test-script` names — no
+  assumption about naming (the `e2e-test.yml` workflow defaults it to
+  `test:e2e`)
 
 ## Versioning
 
-Plugin repos reference `@main` to always get the latest action. If you
+Plugin repos reference `@main` to always get the latest version. If you
 prefer stability over automatic updates, pin to a tag or commit SHA instead:
 
 ```yaml
-uses: laughedelic/gha-obsidian/actions/release@v1
+uses: laughedelic/gha-obsidian/.github/workflows/release.yml@v1
 ```
-
-## Why composite actions instead of reusable workflows?
-
-The previous `workflow_call` reusable workflows caused release assets to
-fail attestation verification. When a `workflow_call` job runs
-`actions/attest-build-provenance`, the OIDC token's signer identity
-(`job_workflow_ref`, surfaced as the certificate's SAN / `buildSignerURI`)
-is bound to *this* repo's workflow file
-(`laughedelic/gha-obsidian/.github/workflows/release.yml`), not to the
-calling plugin repo, even though `sourceRepositoryURI` correctly shows the
-plugin repo. Verifying against the plugin repo without also passing
-`--signer-repo laughedelic/gha-obsidian` fails:
-
-```
-$ gh attestation verify main.js --repo laughedelic/some-plugin
-Error: verifying with issuer "sigstore.dev"
-
-$ gh attestation verify main.js --repo laughedelic/some-plugin \
-    --signer-repo laughedelic/gha-obsidian
-✓ verified
-```
-
-This is documented, expected behavior for reusable workflows (see GitHub's
-["Using artifact attestations and reusable workflows to achieve SLSA v1
-Build Level 3"](https://github.blog/security/supply-chain-security/using-artifact-attestations-to-establish-provenance-for-builds/)) —
-the signer is supposed to be the trusted centralized builder. But automated
-checks that naively compare signer repo to source repo (without knowing
-about `--signer-repo`) reject the result.
-
-Composite actions don't have this problem: their steps execute *inside the
-caller's own job*, so `job_workflow_ref` stays whatever workflow file the
-caller repo defines. Attesting from `actions/release` run as a step in a
-plugin repo's own `.github/workflows/release.yml` produces a signer identity
-that matches the plugin repo directly.
