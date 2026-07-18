@@ -1,0 +1,43 @@
+name: Obsidian Plugin E2E Tests
+description: Run wdio-obsidian-service e2e tests for an Obsidian plugin
+
+inputs:
+  node-version:
+    description: Node.js version to use (left empty to use setup-node's own default, i.e. whatever's pre-installed on the runner)
+  mobile:
+    description: Run the mobile e2e test script instead of the desktop one
+    default: "false"
+  test-script:
+    description: npm script to run for desktop e2e tests
+    default: "test:e2e"
+  test-script-mobile:
+    description: npm script to run for mobile e2e tests
+    default: "test:e2e:mobile"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7
+
+    - uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    - run: npm ci
+      shell: bash
+
+    - uses: actions/cache@v4
+      with:
+        path: .obsidian-cache
+        key: obsidian-cache-${{ runner.os }}-latest
+
+    - name: Run e2e tests
+      shell: bash
+      run: |
+        if [[ "${{ inputs.mobile }}" == "true" ]]; then
+          script="${{ inputs.test-script-mobile }}"
+        else
+          script="${{ inputs.test-script }}"
+        fi
+        xvfb-run --auto-servernum npm run "$script"
