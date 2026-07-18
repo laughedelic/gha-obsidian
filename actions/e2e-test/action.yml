@@ -47,7 +47,7 @@ runs:
     - uses: actions/cache@v4
       with:
         path: .obsidian-cache
-        key: obsidian-cache-${{ runner.os }}-${{ inputs.versions-lock-command != '' && hashFiles('obsidian-versions.lock') || 'latest' }}
+        key: obsidian-cache-${{ runner.os }}-${{ case(inputs.versions-lock-command != '', hashFiles('obsidian-versions.lock'), 'latest') }}
 
     - name: Install window manager
       if: inputs.window-manager == 'true'
