@@ -149,6 +149,7 @@ No inputs.
 | `test-script`             | _(required)_   | npm script to run for the e2e tests. Call the action/workflow once per script for separate desktop/mobile suites.                                       |
 | `versions-lock-command`   | _(none)_       | Shell command run after `npm ci`, before build/cache; its stdout is hashed for the Obsidian binary cache key. Leave empty for a static, non-version-aware entry. |
 | `window-manager`          | `false`        | Install and run `herbstluftwm` + `dzen2` under Xvfb                                                                                                      |
+| `window-manager-packages` | _(none)_       | Extra apt packages to install alongside `herbstluftwm` + `dzen2` (space-separated), e.g. `x11-xserver-utils` if herbstluftwm's default autostart fails on a missing `xsetroot`. Only used when `window-manager` is true. |
 
 ### `actions/release`
 

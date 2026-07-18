@@ -18,6 +18,10 @@ on:
         description: Install and run herbstluftwm + dzen2 under Xvfb
         type: boolean
         default: false
+      window-manager-packages:
+        description: Extra apt packages to install alongside herbstluftwm + dzen2 (space-separated)
+        type: string
+        default: ""
 
 jobs:
   e2e:
@@ -35,3 +39,4 @@ jobs:
           test-script: ${{ inputs.test-script }}
           versions-lock-command: ${{ inputs.versions-lock-command }}
           window-manager: ${{ inputs.window-manager }}
+          window-manager-packages: ${{ inputs.window-manager-packages }}

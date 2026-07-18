@@ -26,6 +26,15 @@ inputs:
       real window management (e.g. focus/hover behavior) rather than a bare
       X server.
     default: "false"
+  window-manager-packages:
+    description: >
+      Extra apt packages to install alongside herbstluftwm + dzen2
+      (space-separated). herbstluftwm's default autostart script calls
+      xsetroot, which isn't pulled in by herbstluftwm or dzen2 themselves --
+      pass "x11-xserver-utils" if your autostart isn't overridden and you
+      hit "xsetroot: command not found" / herbstluftwm dying on startup.
+      Only used when window-manager is true.
+    default: ""
 
 runs:
   using: composite
@@ -54,7 +63,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y herbstluftwm dzen2
+        sudo apt-get install -y herbstluftwm dzen2 ${{ inputs.window-manager-packages }}
 
     - name: Run e2e tests
       shell: bash
