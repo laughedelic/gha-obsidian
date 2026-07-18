@@ -70,8 +70,11 @@ runs:
       run: |
         prefix=""
         if [[ "${{ inputs.window-manager }}" == "true" ]]; then
-          # give herbstluftwm a moment to attach to the display before tests
-          # start probing focus/hover state, or the first assertions race it
-          prefix="herbstluftwm & dzen2 & sleep 1; "
+          # herbstluftwm's own autostart already launches a dzen2 panel per
+          # monitor -- starting a second dzen2 here races it for the same X
+          # resources and crashes herbstluftwm with a BadDrawable error.
+          # Give herbstluftwm a moment to attach before tests start probing
+          # focus/hover state, or the first assertions race it.
+          prefix="herbstluftwm & sleep 1; "
         fi
         xvfb-run --auto-servernum bash -c "${prefix}npm run ${{ inputs.test-script }}"
