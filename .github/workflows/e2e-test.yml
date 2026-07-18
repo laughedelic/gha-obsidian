@@ -10,8 +10,8 @@ on:
         description: npm script to run for the e2e tests
         type: string
         default: "test:e2e"
-      versions-lock-file:
-        description: Path to a file to hash for the Obsidian binary cache key
+      versions-lock-command:
+        description: Shell command whose stdout is hashed for the Obsidian binary cache key
         type: string
         default: ""
       window-manager:
@@ -33,5 +33,5 @@ jobs:
       - uses: laughedelic/gha-obsidian/actions/e2e-test@main
         with:
           test-script: ${{ inputs.test-script }}
-          versions-lock-file: ${{ inputs.versions-lock-file }}
+          versions-lock-command: ${{ inputs.versions-lock-command }}
           window-manager: ${{ inputs.window-manager }}

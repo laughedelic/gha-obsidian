@@ -12,11 +12,13 @@ inputs:
       test:e2e:mobile). Call this action/workflow once per script if you
       have separate desktop/mobile e2e suites.
     required: true
-  versions-lock-file:
+  versions-lock-command:
     description: >
-      Path to a file to hash for the Obsidian binary cache key (e.g. a lock
-      file your wdio config generates, listing the Obsidian version(s) to
-      download). Leave empty to use a single, non-version-aware cache entry.
+      Shell command to run (after npm ci, before build) whose stdout is
+      hashed for the Obsidian binary cache key -- typically something that
+      prints the Obsidian version(s) your e2e config resolves and
+      downloads, so the cache invalidates when the pinned version changes.
+      Leave empty for a single, non-version-aware cache entry.
     default: ""
   window-manager:
     description: >
@@ -31,13 +33,21 @@ runs:
     - run: npm ci
       shell: bash
 
+    - name: Resolve Obsidian versions lock
+      if: inputs.versions-lock-command != ''
+      shell: bash
+      run: |
+        set -o pipefail
+        ${{ inputs.versions-lock-command }} > obsidian-versions.lock
+        rm -rf .obsidian-cache
+
     - run: npm run build
       shell: bash
 
     - uses: actions/cache@v4
       with:
         path: .obsidian-cache
-        key: obsidian-cache-${{ runner.os }}-${{ case(inputs.versions-lock-file != '', hashFiles(inputs.versions-lock-file), 'latest') }}
+        key: obsidian-cache-${{ runner.os }}-${{ case(inputs.versions-lock-command != '', hashFiles('obsidian-versions.lock'), 'latest') }}
 
     - name: Install window manager
       if: inputs.window-manager == 'true'

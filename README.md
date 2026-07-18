@@ -55,6 +55,8 @@ jobs:
     with:
       node-version: "22"
       test-script: "test:e2e"
+      versions-lock-command: "npx tsx wdio.conf.mts 2>/dev/null | grep 'obsidian-cache-key:'"
+      window-manager: true # if your tests need real focus/hover behavior
 
   e2e-mobile:
     uses: laughedelic/gha-obsidian/.github/workflows/e2e-test.yml@main
@@ -97,8 +99,8 @@ if you have separate desktop/mobile suites, as in the example above.
 ## Usage: composite actions (custom jobs)
 
 Use these directly, at the step level, when your job needs more than the
-typical checkout → setup-node → run pipeline — e.g. extra tooling, a
-different step order, or version-aware e2e caching:
+typical checkout → setup-node → run pipeline — e.g. extra tooling, or a
+different step order:
 
 ```yaml
 jobs:
@@ -109,12 +111,12 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: "22", cache: npm }
 
-      - run: node -e "..." > obsidian-versions-lock.txt # resolve pinned Obsidian version(s)
+      - run: sudo apt-get install -y some-extra-tool
 
       - uses: laughedelic/gha-obsidian/actions/e2e-test@main
         with:
           test-script: test:e2e
-          versions-lock-file: obsidian-versions-lock.txt
+          versions-lock-command: "npx tsx wdio.conf.mts 2>/dev/null | grep 'obsidian-cache-key:'"
           window-manager: true # if your tests need real focus/hover behavior
 ```
 
@@ -131,7 +133,10 @@ No inputs.
 
 ### `actions/e2e-test`
 
-- `npm ci`, `npm run build`
+- `npm ci`
+- Optionally runs `versions-lock-command` and hashes its output for the
+  Obsidian binary cache key
+- `npm run build`
 - Caches the downloaded Obsidian binary (`.obsidian-cache`)
 - Optionally installs and starts `herbstluftwm` + `dzen2` under Xvfb, for
   tests that need real window management (e.g. focus/hover behavior) rather
@@ -139,11 +144,11 @@ No inputs.
 - Runs the e2e npm script under `xvfb-run` (Obsidian is Electron and needs a
   display even when "headless")
 
-| Input                 | Default   | Description                                                                                                              |
-| ---------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `test-script`          | _(required)_ | npm script to run for the e2e tests. Call the action/workflow once per script for separate desktop/mobile suites.        |
-| `versions-lock-file`   | _(none)_    | Path to a file to hash for the Obsidian binary cache key, for version-aware invalidation. Leave empty for a static entry. |
-| `window-manager`       | `false`    | Install and run `herbstluftwm` + `dzen2` under Xvfb                                                                       |
+| Input                    | Default      | Description                                                                                                                                             |
+| ------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test-script`             | _(required)_   | npm script to run for the e2e tests. Call the action/workflow once per script for separate desktop/mobile suites.                                       |
+| `versions-lock-command`   | _(none)_       | Shell command run after `npm ci`, before build/cache; its stdout is hashed for the Obsidian binary cache key. Leave empty for a static, non-version-aware entry. |
+| `window-manager`          | `false`        | Install and run `herbstluftwm` + `dzen2` under Xvfb                                                                                                      |
 
 ### `actions/release`
 
